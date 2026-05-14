@@ -1,85 +1,43 @@
-name: Download Game from Itch.io
+name: Download Itch.io Game
 
 on:
   workflow_dispatch:
-    inputs:
-      gameUrl:
-        description: 'URL of the itch.io game page (e.g., https://username.itch.io/game-name)'
-        required: true
-        type: string
 
 jobs:
   download:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout your forked repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Install download tool
-        run: npm install itchio-downloader
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create downloads directory
         run: mkdir -p downloads
 
-      - name: Download the game
-        uses: actions/github-script@v7
+      - name: Download game from Itch.io
+        uses: Wal33D/itchio-downloader@main
         with:
-          script: |
-            const { downloadGame } = require('${process.env.GITHUB_WORKSPACE}/node_modules/itchio-downloader');
-            const fs = require('fs');
-            const path = require('path');
-            
-            const gameUrl = '${{ github.event.inputs.gameUrl }}';
-            const downloadsDir = '${process.env.GITHUB_WORKSPACE}/downloads';
-            const tempDir = '${process.env.GITHUB_WORKSPACE}/temp_download';
+          itch-game-id: ${{ secrets.ITCH_GAME_ID }}
+          
+      - name: Move downloaded files to downloads folder
+        run: |
+          # Move all files and folders except .git, workflow files, and downloads itself
+          for item in *; do
+            if [ "$item" != "downloads" ] && [ "$item" != ".git" ] && [ "$item" != ".github" ]; then
+              mv "$item" downloads/ 2>/dev/null || true
+            fi
+          done
 
-            console.log(`Downloading ${gameUrl}...`);
-            
-            try {
-              // Download to a temp directory first
-              await downloadGame({
-                itchGameUrl: gameUrl,
-                output: tempDir
-              });
-              
-              // Move all contents from temp to downloads/
-              if (fs.existsSync(tempDir)) {
-                const items = fs.readdirSync(tempDir);
-                for (const item of items) {
-                  const src = path.join(tempDir, item);
-                  const dest = path.join(downloadsDir, item);
-                  
-                  // If a file/folder with this name already exists in downloads, append a suffix
-                  let finalDest = dest;
-                  if (fs.existsSync(dest)) {
-                    const ext = path.extname(item);
-                    const name = path.basename(item, ext);
-                    finalDest = path.join(downloadsDir, `${name}_${Date.now()}${ext}`);
-                  }
-                  
-                  fs.renameSync(src, finalDest);
-                  console.log(`Moved: ${item} -> downloads/${path.basename(finalDest)}`);
-                }
-                
-                // Clean up temp directory
-                fs.rmdirSync(tempDir);
-              }
-              
-              console.log('Download and reorganization complete!');
-            } catch (error) {
-              console.error('Download failed:', error);
-              throw error;
-            }
+      - name: List downloaded files
+        run: |
+          echo "Files in downloads directory:"
+          ls -la downloads/
 
       - name: Commit and push downloaded files
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add downloads/
-          git commit -m "Download game from ${{ github.event.inputs.gameUrl }}" || echo "No changes to commit"
+          git commit -m "Add downloaded game files from Itch.io" || echo "No changes to commit"
           git push
