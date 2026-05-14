@@ -17,35 +17,33 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          lfs: true
 
-      - name: Extract game ID from URL
-        id: extract
+      - name: Setup Git LFS
         run: |
-          # Extract the game ID from the URL (everything after itch.io/)
-          GAME_URL="${{ github.event.inputs.game_url }}"
-          # Remove trailing slash if present
-          GAME_URL="${GAME_URL%/}"
-          # Get the last part of the URL
-          GAME_ID=$(echo "$GAME_URL" | awk -F'/' '{print $NF}')
-          echo "Extracted game ID: $GAME_ID"
-          echo "game_id=$GAME_ID" >> $GITHUB_OUTPUT
+          git lfs install
+          # Track zip files with LFS
+          git lfs track "*.zip"
+          git lfs track "*.rar"
+          git lfs track "*.7z"
+          git lfs track "*.exe"
+          git lfs track "*.apk"
+          git add .gitattributes
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install itchio-downloader CLI
+        run: npm install -g itchio-downloader
 
       - name: Create downloads directory
         run: mkdir -p downloads
 
-      - name: Download game from Itch.io
-        uses: Wal33D/itchio-downloader@main
-        with:
-          itch-game-id: ${{ steps.extract.outputs.game_id }}
-          
-      - name: Move downloaded files to downloads folder
+      - name: Download game directly to downloads folder
         run: |
-          # Move all files and folders except .git, workflow files, and downloads itself
-          for item in *; do
-            if [ "$item" != "downloads" ] && [ "$item" != ".git" ] && [ "$item" != ".github" ]; then
-              mv "$item" downloads/ 2>/dev/null || true
-            fi
-          done
+          itchio-downloader --url "${{ github.event.inputs.game_url }}" --downloadDirectory ./downloads
 
       - name: List downloaded files
         run: |
@@ -56,6 +54,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .gitattributes
           git add downloads/
-          git commit -m "Add downloaded game files from ${{ steps.extract.outputs.game_id }}" || echo "No changes to commit"
+          git commit -m "Add downloaded game files" || echo "No changes to commit"
           git push
