@@ -1,16 +1,28 @@
 name: Download Itch.io Games
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
     inputs:
       game_url:
         description: 'Itch.io game URL'
         required: true
         default: 'https://baraklava.itch.io/manic-miners'
       platform:
-        description: 'Platform (windows, linux, mac, android, or leave empty for auto)'
+        description: 'Platform (windows, linux, osx)'
         required: false
-        default: ''
+        default: 'windows'
+      use_api_key:
+        description: 'Use API key? (paste key in next field if yes)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      api_key:
+        description: 'Your itch.io API key (if needed)'
+        required: false
+        type: string
 
 jobs:
   download:
@@ -31,15 +43,32 @@ jobs:
       - name: Create downloads directory
         run: mkdir -p downloads
       
-      - name: Download game to repo
+      - name: Download game with platform and API key
+        env:
+          ITCH_API_KEY: ${{ github.event.inputs.api_key }}
         run: |
-          if [ -z "${{ github.event.inputs.platform }}" ]; then
-            itchio-downloader --url "${{ github.event.inputs.game_url }}" --downloadDirectory ./downloads
+          if [ "${{ github.event.inputs.use_api_key }}" = "true" ]; then
+            itchio-downloader \
+              --url "${{ github.event.inputs.game_url }}" \
+              --platform "${{ github.event.inputs.platform }}" \
+              --apiKey "${{ github.event.inputs.api_key }}" \
+              --downloadDirectory ./downloads
           else
-            itchio-downloader --url "${{ github.event.inputs.game_url }}" --platform "${{ github.event.inputs.platform }}" --downloadDirectory ./downloads
+            itchio-downloader \
+              --url "${{ github.event.inputs.game_url }}" \
+              --platform "${{ github.event.inputs.platform }}" \
+              --downloadDirectory ./downloads
           fi
       
-      - name: Commit and push downloaded files
+      - name: List downloaded files (debug)
+        run: |
+          echo "=== Contents of downloads/ ==="
+          ls -la downloads/
+          echo ""
+          echo "=== Finding game files (non-JSON) ==="
+          find downloads/ -type f ! -name "*.json" | head -20
+      
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
