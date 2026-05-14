@@ -1,35 +1,46 @@
-name: Download Itch.io Games
+name: Download itch.io Game
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
     inputs:
       game_url:
-        description: 'Itch.io game URL'
+        description: 'itch.io game URL'
         required: true
-        default: 'https://baraklava.itch.io/manic-miners'
+        type: string
+      
+      platform:
+        description: 'Target Platform'
+        required: true
+        type: choice
+        options:
+          - windows
+          - mac
+          - linux
+          - android
+        default: 'windows'
 
 jobs:
   download:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '20'
+          python-version: '3.11'
       
-      - name: Install itchio-downloader
-        run: npm install -g itchio-downloader
+      - name: Install dependencies
+        run: pip install -r requirements.txt
       
       - name: Download game
         run: |
-          itchio-downloader --url "${{ github.event.inputs.game_url }}" --downloadDirectory ./downloads
+          python itch-downloader.py "${{ github.event.inputs.game_url }}" \
+            --platform "${{ github.event.inputs.platform }}" \
+            --output ./downloads
       
-      - name: Upload as artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: downloaded-game
-          path: ./downloads/
+          name: game-${{ github.event.inputs.platform }}
+          path: downloads/*
