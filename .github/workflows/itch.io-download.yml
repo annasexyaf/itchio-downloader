@@ -2,6 +2,12 @@ name: Download Itch.io Game
 
 on:
   workflow_dispatch:
+    inputs:
+      game_url:
+        description: 'Itch.io game URL'
+        required: true
+        type: string
+        default: ''
 
 jobs:
   download:
@@ -12,13 +18,25 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract game ID from URL
+        id: extract
+        run: |
+          # Extract the game ID from the URL (everything after itch.io/)
+          GAME_URL="${{ github.event.inputs.game_url }}"
+          # Remove trailing slash if present
+          GAME_URL="${GAME_URL%/}"
+          # Get the last part of the URL
+          GAME_ID=$(echo "$GAME_URL" | awk -F'/' '{print $NF}')
+          echo "Extracted game ID: $GAME_ID"
+          echo "game_id=$GAME_ID" >> $GITHUB_OUTPUT
+
       - name: Create downloads directory
         run: mkdir -p downloads
 
       - name: Download game from Itch.io
         uses: Wal33D/itchio-downloader@main
         with:
-          itch-game-id: ${{ secrets.ITCH_GAME_ID }}
+          itch-game-id: ${{ steps.extract.outputs.game_id }}
           
       - name: Move downloaded files to downloads folder
         run: |
@@ -39,5 +57,5 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add downloads/
-          git commit -m "Add downloaded game files from Itch.io" || echo "No changes to commit"
+          git commit -m "Add downloaded game files from ${{ steps.extract.outputs.game_id }}" || echo "No changes to commit"
           git push
