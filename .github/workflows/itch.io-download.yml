@@ -1,0 +1,35 @@
+name: Download Itch.io Games
+
+on:
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      game_url:
+        description: 'Itch.io game URL'
+        required: true
+        default: 'https://baraklava.itch.io/manic-miners'
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install itchio-downloader
+        run: npm install -g itchio-downloader
+      
+      - name: Download game
+        run: |
+          itchio-downloader --url "${{ github.event.inputs.game_url }}" --downloadDirectory ./downloads
+      
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded-game
+          path: ./downloads/
