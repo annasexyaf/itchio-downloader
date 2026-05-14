@@ -1,77 +1,85 @@
-name: Download Itch.io Games
+name: Download Game from Itch.io
 
 on:
   workflow_dispatch:
     inputs:
-      game_url:
-        description: 'Itch.io game URL'
+      gameUrl:
+        description: 'URL of the itch.io game page (e.g., https://username.itch.io/game-name)'
         required: true
-        default: 'https://baraklava.itch.io/manic-miners'
-      platform:
-        description: 'Platform (windows, linux, osx)'
-        required: false
-        default: 'windows'
-      use_api_key:
-        description: 'Use API key? (paste key in next field if yes)'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
-      api_key:
-        description: 'Your itch.io API key (if needed)'
-        required: false
         type: string
 
 jobs:
   download:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout repo
+      - name: Checkout your forked repository
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
-      - name: Install itchio-downloader
-        run: npm install -g itchio-downloader
-      
+
+      - name: Install download tool
+        run: npm install itchio-downloader
+
       - name: Create downloads directory
         run: mkdir -p downloads
-      
-      - name: Download game with platform and API key
-        env:
-          ITCH_API_KEY: ${{ github.event.inputs.api_key }}
+
+      - name: Download the game
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { downloadGame } = require('${process.env.GITHUB_WORKSPACE}/node_modules/itchio-downloader');
+            const fs = require('fs');
+            const path = require('path');
+            
+            const gameUrl = '${{ github.event.inputs.gameUrl }}';
+            const downloadsDir = '${process.env.GITHUB_WORKSPACE}/downloads';
+            const tempDir = '${process.env.GITHUB_WORKSPACE}/temp_download';
+
+            console.log(`Downloading ${gameUrl}...`);
+            
+            try {
+              // Download to a temp directory first
+              await downloadGame({
+                itchGameUrl: gameUrl,
+                output: tempDir
+              });
+              
+              // Move all contents from temp to downloads/
+              if (fs.existsSync(tempDir)) {
+                const items = fs.readdirSync(tempDir);
+                for (const item of items) {
+                  const src = path.join(tempDir, item);
+                  const dest = path.join(downloadsDir, item);
+                  
+                  // If a file/folder with this name already exists in downloads, append a suffix
+                  let finalDest = dest;
+                  if (fs.existsSync(dest)) {
+                    const ext = path.extname(item);
+                    const name = path.basename(item, ext);
+                    finalDest = path.join(downloadsDir, `${name}_${Date.now()}${ext}`);
+                  }
+                  
+                  fs.renameSync(src, finalDest);
+                  console.log(`Moved: ${item} -> downloads/${path.basename(finalDest)}`);
+                }
+                
+                // Clean up temp directory
+                fs.rmdirSync(tempDir);
+              }
+              
+              console.log('Download and reorganization complete!');
+            } catch (error) {
+              console.error('Download failed:', error);
+              throw error;
+            }
+
+      - name: Commit and push downloaded files
         run: |
-          if [ "${{ github.event.inputs.use_api_key }}" = "true" ]; then
-            itchio-downloader \
-              --url "${{ github.event.inputs.game_url }}" \
-              --platform "${{ github.event.inputs.platform }}" \
-              --apiKey "${{ github.event.inputs.api_key }}" \
-              --downloadDirectory ./downloads
-          else
-            itchio-downloader \
-              --url "${{ github.event.inputs.game_url }}" \
-              --platform "${{ github.event.inputs.platform }}" \
-              --downloadDirectory ./downloads
-          fi
-      
-      - name: List downloaded files (debug)
-        run: |
-          echo "=== Contents of downloads/ ==="
-          ls -la downloads/
-          echo ""
-          echo "=== Finding game files (non-JSON) ==="
-          find downloads/ -type f ! -name "*.json" | head -20
-      
-      - name: Commit and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
           git add downloads/
-          git diff --staged --quiet || git commit -m "Download game from ${{ github.event.inputs.game_url }}"
+          git commit -m "Download game from ${{ github.event.inputs.gameUrl }}" || echo "No changes to commit"
           git push
